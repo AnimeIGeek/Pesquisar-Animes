@@ -1,0 +1,343 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anime Search Hub</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300..700&family=Ubuntu:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --text-primary: #f9fafb;
+            --text-secondary: #b8c0d0;
+            --background: #070b17;
+            --surface: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.08);
+            --shadow-color: rgba(0, 0, 0, 0.6);
+            --highlight-color: #e50914;
+        }
+
+        [data-theme="light"] {
+            --text-primary: #1f2937;
+            --text-secondary: #4b5563;
+            --background: #f3f4f6;
+            --surface: rgba(0, 0, 0, 0.05);
+            --border: rgba(0, 0, 0, 0.1);
+            --shadow-color: rgba(0, 0, 0, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: 'Jura', sans-serif;
+            font-weight: 400;
+            line-height: 1.5;
+            background: var(--background);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 60px;
+            overflow-x: hidden;
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        .top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: rgba(18, 21, 32, 0.85);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            z-index: 1001;
+            box-shadow: 0 2px 5px var(--shadow-color);
+        }
+
+        [data-theme="light"] .top-bar {
+            background: rgba(255, 255, 255, 0.85);
+        }
+
+        .top-bar__title {
+            font-family: 'Ubuntu', sans-serif;
+            font-weight: 500;
+            font-size: 1.2em;
+            color: var(--text-primary);
+        }
+
+        .top-bar__theme-toggle {
+            color: var(--text-primary);
+            background: none;
+            border: none;
+            font-family: 'Ubuntu', sans-serif;
+            font-weight: 500;
+            font-size: 0.9em;
+            padding: 7px 12px;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .top-bar__theme-toggle:hover {
+            color: var(--highlight-color);
+        }
+
+        .search-container {
+            max-width: 800px;
+            width: 95%;
+            margin: 20px auto;
+            position: relative;
+        }
+
+        .search-bar {
+            width: 100%;
+            padding: 12px 40px 12px 15px;
+            font-family: 'Jura', sans-serif;
+            font-size: 1em;
+            background: var(--surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-bar:focus {
+            border-color: var(--highlight-color);
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            font-size: 1.2em;
+        }
+
+        .anime-list {
+            max-width: 800px;
+            width: 95%;
+            margin: 20px auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .anime-card {
+            display: flex;
+            align-items: center;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px var(--shadow-color);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .anime-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 15px var(--shadow-color);
+        }
+
+        .anime-card img {
+            width: 120px;
+            height: 90px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .anime-card-content {
+            padding: 15px;
+            flex-grow: 1;
+        }
+
+        .anime-card-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+
+        .anime-card-synopsis {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @media (max-width: 768px) {
+            .top-bar {
+                height: 45px;
+                padding: 0 10px;
+            }
+
+            .top-bar__title {
+                font-size: 1em;
+            }
+
+            .top-bar__theme-toggle {
+                font-size: 0.8em;
+                padding: 5px 10px;
+            }
+
+            .search-bar {
+                padding: 10px 35px 10px 12px;
+                font-size: 0.9em;
+            }
+
+            .search-icon {
+                font-size: 1em;
+            }
+
+            .anime-card img {
+                width: 100px;
+                height: 75px;
+            }
+
+            .anime-card-title {
+                font-size: 1em;
+            }
+
+            .anime-card-synopsis {
+                font-size: 0.8em;
+                -webkit-line-clamp: 3;
+            }
+        }
+    </style>
+</head>
+<body data-theme="light">
+    <div class="top-bar">
+        <div class="top-bar__title">Anime Search Hub</div>
+        <button class="top-bar__theme-toggle" aria-label="Alternar tema">
+            <i class="fas fa-sun"></i> Tema
+        </button>
+    </div>
+    <div class="search-container">
+        <input type="text" class="search-bar" id="searchBar" placeholder="Pesquisar animes..." aria-label="Pesquisar animes">
+        <i class="fas fa-search search-icon"></i>
+    </div>
+    <div class="anime-list" id="animeList"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchBar = document.getElementById('searchBar');
+            const animeList = document.getElementById('animeList');
+            const themeToggle = document.querySelector('.top-bar__theme-toggle');
+            const body = document.body;
+
+            const animes = [
+                {
+                    title: "Naruto",
+                    synopsis: "Naruto Uzumaki, um jovem ninja órfão com o demônio de Nove Caudas selado dentro dele, busca reconhecimento em sua vila e sonha em se tornar Hokage.",
+                    image: "https://i.postimg.cc/DfNBgLMv/00-33-46-images.jpg",
+                    link: "https://animeigeek.github.io/anime-mono1/"
+                },
+                {
+                    title: "One Piece",
+                    synopsis: "Monkey D. Luffy e sua tripulação de piratas buscam o maior tesouro do mundo, o One Piece, para se tornar o Rei dos Piratas.",
+                    image: "https://i.postimg.cc/DfNBgLMv/00-33-46-images.jpg", // Placeholder
+                    link: "https://animeigeek.github.io/anime-mono2/" // Placeholder
+                },
+                {
+                    title: "Attack on Titan",
+                    synopsis: "Eren Yeager e seus amigos lutam contra titãs gigantes que ameaçam a humanidade, enquanto descobrem segredos sombrios sobre seu mundo.",
+                    image: "https://i.postimg.cc/DfNBgLMv/00-33-46-images.jpg", // Placeholder
+                    link: "https://animeigeek.github.io/anime-mono3/" // Placeholder
+                }
+            ];
+
+            function renderAnimes(filteredAnimes) {
+                animeList.innerHTML = '';
+                filteredAnimes.forEach(anime => {
+                    const card = document.createElement('a');
+                    card.className = 'anime-card';
+                    card.href = anime.link;
+                    card.setAttribute('aria-label', `Acessar página do anime ${anime.title}`);
+                    card.innerHTML = `
+                        <img src="${anime.image}" alt="${anime.title}" loading="lazy" onerror="this.src='https://via.placeholder.com/120x90?text=Imagem+Indisponível'">
+                        <div class="anime-card-content">
+                            <div class="anime-card-title">${anime.title}</div>
+                            <div class="anime-card-synopsis">${anime.synopsis}</div>
+                        </div>
+                    `;
+                    animeList.appendChild(card);
+                });
+            }
+
+            function filterAnimes() {
+                const query = searchBar.value.toLowerCase().trim();
+                const filtered = animes.filter(anime => anime.title.toLowerCase().includes(query));
+                renderAnimes(filtered);
+            }
+
+            function toggleTheme() {
+                const currentTheme = body.dataset.theme;
+                body.dataset.theme = currentTheme === 'light' ? 'dark' : 'light';
+                themeToggle.innerHTML = `<i class="fas ${body.dataset.theme === 'light' ? 'fa-sun' : 'fa-moon'}"></i> Tema`;
+            }
+
+            searchBar.addEventListener('input', filterAnimes);
+            themeToggle.addEventListener('click', toggleTheme);
+
+            // Initial render
+            renderAnimes(animes);
+        });
+    </script>
+</body>
+</html>
